@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         checkbox: { equals: true }
       },
       sorts: [
-        { property: "Date", direction: "ascending" }
+        { property: "Added", direction: "ascending" }
       ]
     });
 
