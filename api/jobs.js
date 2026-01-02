@@ -2,20 +2,16 @@ import { Client } from "@notionhq/client";
 
 export default async function handler(req, res) {
   /* ===============================
-     CORS – exakt wie bei Events
+     CORS
      =============================== */
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,OPTIONS"
-  );
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization"
   );
   res.setHeader("Content-Type", "application/json");
 
-  // Preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -34,56 +30,84 @@ export default async function handler(req, res) {
 
     const response = await notion.databases.query({
       database_id: process.env.NOTION_DB_ID,
+
+      /* ========= FILTER ========= */
       filter: {
-        property: "Published",
+        property: "Online",
         checkbox: { equals: true }
       },
+
+      /* ========= SORT ========= */
       sorts: [
-        { property: "Added", direction: "ascending" }
+        {
+          property: "Added",
+          direction: "descending"
+        }
       ]
     });
 
     const items = response.results.map(page => {
-      /* ---------- IMAGE (Files & media) ---------- */
-      const files = page.properties.image?.files ?? [];
-      let image = null;
+      /* ---------- COMPANY LOGO ---------- */
+      const logoFiles =
+        page.properties["Company Logo"]?.files ?? [];
 
-      for (const f of files) {
+      let logo = null;
+      for (const f of logoFiles) {
         if (f.type === "file" && f.file?.url) {
-          image = f.file.url;
+          logo = f.file.url;
           break;
         }
         if (f.type === "external" && f.external?.url) {
-          image = f.external.url;
+          logo = f.external.url;
           break;
         }
       }
 
-      /* ---------- DESCRIPTION ---------- */
-      const description =
-        page.properties.Description?.rich_text
+      /* ---------- LOCATION ---------- */
+      const locationPill =
+        page.properties["Location (pill)"]?.select
+          ?.name ?? "";
+
+      const locationText =
+        page.properties["Location (text)"]?.rich_text
           ?.map(t => t.plain_text)
           .join("") ?? "";
 
       return {
+        id: page.id,
+
         title:
-          page.properties.name?.title?.[0]?.plain_text ?? "",
-        desc: description,
-        region:
-          page.properties.Region?.select?.name ?? "",
-        url:
-          page.properties.url?.url ?? "",
-        image,
-        date: {
-          start:
-            page.properties.Date?.date?.start ?? null
-        },
-        featured:
-          page.properties.Featured?.checkbox ?? false
+          page.properties["Job Title"]?.title?.[0]
+            ?.plain_text ?? "",
+
+        company:
+          page.properties["Company Name"]?.rich_text
+            ?.map(t => t.plain_text)
+            .join("") ?? "",
+
+        category:
+          page.properties["Category"]?.select?.name ?? "",
+
+        location: locationPill || locationText,
+
+        link:
+          page.properties["super:Link"]?.url ?? "",
+
+        contact:
+          page.properties["contact mail"]?.email ?? "",
+
+        logo,
+
+        added:
+          page.properties["Added"]?.date?.start ??
+          null
       };
     });
 
-    return res.status(200).json({ items });
+    return res.status(200).json({
+      count: items.length,
+      items
+    });
 
   } catch (err) {
     console.error("API ERROR:", err);
